@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>媽媽的治療與健康紀錄簿</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- SheetJS for Excel Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <style>
+        body { font-family: "Microsoft JhengHei", "Heiti TC", sans-serif; background-color: #f1f5f9; }
+        .tab-btn.active {
+            background-color: #0d9488; /* Teal-600 */
+            color: white;
+            border-bottom: 4px solid #115e59;
+        }
+        .tab-btn {
+            transition: all 0.2s;
+            white-space: nowrap;
+            color: #475569;
+        }
+        .tab-btn:hover:not(.active) {
+            background-color: #e2e8f0;
+        }
+        /* Mobile text adjustment */
+        @media (max-width: 640px) {
+            .tab-text { font-size: 10px; }
+            .tab-btn i { font-size: 1.1rem; margin-bottom: 2px; }
+            .tab-btn { padding: 6px 2px; }
+        }
+        
+        /* Modal Animation */
+        .modal-enter { opacity: 0; transform: scale(0.95); }
+        .modal-enter-active { opacity: 1; transform: scale(1); transition: all 0.2s; }
+        .modal-exit { opacity: 1; transform: scale(1); }
+        .modal-exit-active { opacity: 0; transform: scale(0.95); transition: all 0.2s; }
+    </style>
+</head>
+<body class="pb-20">
+
+    <!-- 刪除確認視窗 -->
+    <div id="delete-modal" class="fixed inset-0 bg-slate-900 bg-opacity-50 hidden flex justify-center items-center z-[100] p-4 transition-opacity duration-200">
+        <div class="bg-white rounded-lg shadow-2xl max-w-sm w-full overflow-hidden">
+            <div class="bg-red-50 p-4 border-b border-red-100 flex items-center">
+                <div class="bg-red-100 rounded-full p-2 mr-3">
+                    <i class="fas fa-exclamation-triangle text-red-600"></i>
+                </div>
+                <h3 class="text-lg font-bold text-red-800">確定刪除？</h3>
+            </div>
+            <div class="p-6">
+                <p class="text-gray-600 mb-2">您確定要刪除這筆紀錄嗎？</p>
+                <p class="text-sm text-gray-400">此動作無法復原。</p>
+            </div>
+            <div class="bg-gray-50 p-4 flex justify-end space-x-3">
+                <button onclick="closeModal('delete-modal')" class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">取消</button>
+                <button onclick="confirmDelete()" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 shadow-sm">確認刪除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新增科別視窗 -->
+    <div id="dept-modal" class="fixed inset-0 bg-slate-900 bg-opacity-50 hidden flex justify-center items-center z-[100] p-4 transition-opacity duration-200">
+        <div class="bg-white rounded-lg shadow-2xl max-w-sm w-full overflow-hidden">
+            <div class="bg-cyan-50 p-4 border-b border-cyan-100 flex items-center">
+                <h3 class="text-lg font-bold text-cyan-800">新增科別</h3>
+            </div>
+            <div class="p-6">
+                <label class="block text-sm text-gray-700 mb-2">請輸入科別名稱：</label>
+                <input type="text" id="new-dept-name" class="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-cyan-500 outline-none">
+            </div>
+            <div class="bg-gray-50 p-4 flex justify-end space-x-3">
+                <button onclick="closeModal('dept-modal')" class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">取消</button>
+                <button onclick="confirmAddDept()" class="px-4 py-2 bg-cyan-600 text-white rounded-md hover:bg-cyan-700 shadow-sm">新增</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast 訊息 -->
+    <div id="toast-message" class="fixed top-20 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-lg z-[100] hidden transition-opacity duration-300 opacity-0">
+        <span id="toast-text">操作成功</span>
+    </div>
+
+    <!-- Header & Tabs -->
+    <div class="sticky top-0 z-50 bg-white shadow-md">
+        <div class="bg-teal-600 text-white p-3 flex justify-between items-center">
+            <h1 class="text-xl font-bold"><i class="fas fa-heartbeat mr-2"></i>媽媽的健康紀錄</h1>
+            <button onclick="exportToExcel()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded text-sm shadow transition">
+                <i class="fas fa-file-excel mr-1"></i>匯出Excel
+            </button>
+        </div>
+        
+        <!-- Modified Nav: Full width, Flexbox, No scroll -->
+        <nav class="flex w-full bg-slate-50 border-b border-slate-200">
+            <button onclick="switchTab('treatment')" class="tab-btn active flex-1 flex flex-col items-center justify-center border-r border-slate-200 py-2">
+                <i class="fas fa-procedures text-xl"></i>
+                <span class="tab-text font-bold text-xs mt-1">住院/化療</span>
+            </button>
+            <button onclick="switchTab('symptoms')" class="tab-btn flex-1 flex flex-col items-center justify-center border-r border-slate-200 py-2">
+                <i class="fas fa-notes-medical text-xl"></i>
+                <span class="tab-text font-bold text-xs mt-1">不適紀錄</span>
+            </button>
+            <button onclick="switchTab('clinic')" class="tab-btn flex-1 flex flex-col items-center justify-center border-r border-slate-200 py-2">
+                <i class="fas fa-user-md text-xl"></i>
+                <span class="tab-text font-bold text-xs mt-1">門診紀錄</span>
+            </button>
+            <button onclick="switchTab('maintenance')" class="tab-btn flex-1 flex flex-col items-center justify-center border-r border-slate-200 py-2">
+                <i class="fas fa-syringe text-xl"></i>
+                <span class="tab-text font-bold text-xs mt-1">保骨/牙齒</span>
+            </button>
+            <button onclick="switchTab('radiotherapy')" class="tab-btn flex-1 flex flex-col items-center justify-center border-r border-slate-200 py-2">
+                <i class="fas fa-x-ray text-xl"></i>
+                <span class="tab-text font-bold text-xs mt-1">放療療程</span>
+            </button>
+            <button onclick="switchTab('reports')" class="tab-btn flex-1 flex flex-col items-center justify-center py-2">
+                <i class="fas fa-file-medical-alt text-xl"></i>
+                <span class="tab-text font-bold text-xs mt-1">檢查報告</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- Main Content -->
+    <main class="container mx-auto p-4 max-w-3xl">
+
+        <!-- 1. Treatment Tab -->
+        <section id="tab-treatment" class="tab-content block">
+            <div class="bg-white p-4 rounded-lg shadow mb-6 border-l-4 border-teal-500 transition-colors duration-300" id="form-card-treatment">
+                <h2 class="text-lg font-bold text-teal-700 mb-4" id="form-title-treatment">新增治療紀錄</h2>
+                
+                <div class="flex mb-4 bg-slate-100 rounded p-1 border border-slate-200">
+                    <button id="btn-inpatient" onclick="toggleTreatmentType('inpatient')" class="flex-1 py-2 rounded bg-white shadow text-teal-600 font-bold transition">住院治療</button>
+                    <button id="btn-outpatient" onclick="toggleTreatmentType('outpatient')" class="flex-1 py-2 rounded text-gray-500 hover:bg-gray-200 transition">門診治療</button>
+                </div>
+                <input type="hidden" id="treatment-type" value="inpatient">
+
+                <div class="grid grid-cols-2 gap-4 mb-3">
+                    <div id="date-admit-group">
+                        <label class="block text-sm text-gray-700 font-medium mb-1">入院日期</label>
+                        <input type="date" id="t-admit-date" class="w-full border border-slate-300 rounded p-2 outline-none focus:ring-2 focus:ring-teal-500" onchange="calcHospitalDays(); autoSetNextDate()">
+                    </div>
+                    <div id="date-discharge-group">
+                        <label class="block text-sm text-gray-700 font-medium mb-1">出院日期</label>
+                        <input type="date" id="t-discharge-date" class="w-full border border-slate-300 rounded p-2 outline-none focus:ring-2 focus:ring-teal-500" onchange="calcHospitalDays()">
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="block text-sm text-gray-700 font-medium mb-1">主要治療日期 (化療/打針日)</label>
+                    <input type="date" id="t-treatment-date" class="w-full border border-teal-200 rounded p-2 bg-teal-50 outline-none focus:ring-2 focus:ring-teal-500">
+                </div>
+
+                <div id="hospital-days-display" class="mb-3 text-sm text-teal-600 font-bold hidden bg-teal-50 p-2 rounded">
+                    <i class="fas fa-calculator"></i> 共計住院 <span id="t-days-count" class="text-lg">0</span> 天
+                </div>
+
+                <div class="mb-3">
+                    <label class="block text-sm text-gray-700 font-medium mb-1">藥品/療程名稱</label>
+                    <input type="text" id="t-meds" class="w-full border border-slate-300 rounded p-2 outline-none focus:ring-2 focus:ring-teal-500" placeholder="例如：歐洲紫杉醇...">
+                </div>
+
+                <div class="mb-3">
+                    <label class="block text-sm text-gray-700 font-medium mb-1">特別注意事項</label>
+                    <textarea id="t-notes" class="w-full border border-slate-300 rounded p-2 outline-none focus:ring-2 focus:ring-teal-500" rows="2" placeholder="副作用、醫生交代..."></textarea>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 mb-3">
+                    <div>
+                        <label class="block text-sm text-gray-700 font-medium mb-1">下一次預計治療</label>
+                        <input type="date" id="t-next-date" class="w-full border border-slate-300 rounded p-2 outline-none focus:ring-2 focus:ring-teal-500">
+                    </div>
+                    <div class="flex items-center pt-6">
+                        <input type="checkbox" id="t-cert" class="w-5 h-5 text-teal-600 rounded focus:ring-teal-500">
+                        <label for="t-cert" class="ml-2 text-gray-700 font-bold select-none">已申請診斷書</label>
+                    </div>
+                </div>
+
+                <button id="btn-save-treatment" onclick="saveTreatment()" class="w-full bg-teal-600 text-white py-3 rounded-lg font-bold shadow hover:bg-teal-700 transition active:scale-[0.98]">
+                    <i class="fas fa-save mr-2"></i>儲存紀錄
+                </button>
+            </div>
+
+            <div class="history-section">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-bold text-gray-600 border-l-4 border-gray-400 pl-2">歷史紀錄</h3>
+                    <div class="relative">
+                        <i class="fas fa-search absolute left-2 top-2 text-gray-400 text-xs"></i>
+                        <input type="text" onkeyup="renderTreatmentHistory(this.value)" placeholder="搜尋..." class="text-sm border rounded pl-7 pr-2 py-1 outline-none focus:ring-1 focus:ring-teal-500 w-32">
+                    </div>
+                </div>
+                <div id="treatment-list" class="space-y-3"></div>
+            </div>
+        </section>
+
+        <!-- 2. Symptoms Tab -->
+        <section id="tab-symptoms" class="tab-content hidden">
+            <div class="bg-white p-4 rounded-lg shadow mb-6 border-l-4 border-amber-500 transition-colors duration-300" id="form-card-symptoms">
+                <h2 class="text-lg font-bold text-amber-700 mb-4" id="form-title-symptoms">不適紀錄</h2>
+                
+                <div class="mb-3">
+                    <label class="block text-sm text-gray-700 font-medium mb-1">發生日期</label>
+                    <input type="date" id="s-date" class="w-full border border-slate-300 rounded p-2 outline-none focus:ring-2 focus:ring-amber-500">
+                </div>
+
+                <div class="mb-3">
+                    <label class="block text-sm text-gray-700 font-medium mb-2">嚴重程度</label>
+                    <!-- Modified: Flexbox Row Layout for Radio Buttons -->
+                    <div class="flex justify-between items-center bg-slate-50 p-2 rounded border border-slate-200" id="s-severity-group">
+                        <label class="cursor-pointer flex flex-col items-center">
+                            <input type="radio" name="s-severity" value="normal" class="text-amber-500 focus:ring-amber-500 w-4 h-4 mb-1" checked>
+                            <span class="text-[10px] sm:text-xs font-medium text-gray-600">一般</span>
+                        </label>
+                        <label class="cursor-pointer flex flex-col items-center">
+                            <input type="radio" name="s-severity" value="mild" class="text-green-500 focus:ring-green-500 w-4 h-4 mb-1">
+                            <span class="text-[10px] sm:text-xs font-medium text-green-600">輕微</span>
+                        </label>
+                        <label class="cursor-pointer flex flex-col items-center">
+                            <input type="radio" name="s-severity" value="moderate" class="text-yellow-500 focus:ring-yellow-500 w-4 h-4 mb-1">
+                            <span class="text-[10px] sm:text-xs font-medium text-yellow-600">中度</span>
+                        </label>
+                        <label class="cursor-pointer flex flex-col items-center">
+                            <input type="radio" name="s-severity" value="severe" class="text-red-500 focus:ring-red-500 w-4 h-4 mb-1">
+                            <span class="text-[10px] sm:text-xs font-bold text-red-600">嚴重</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm text-gray-700 font-medium mb-1">症狀描述 / 特別事情</label>
+                    <textarea id="s-desc" class="w-full border border-slate-300 rounded p-2 outline-none focus:ring-2 focus:ring-amber-500" rows="3" placeholder="例如：手腳發麻、食慾不振..."></textarea>
+                </div>
+
+                <button id="btn-save-symptoms" onclick="saveSymptom()" class="w-full bg-amber-500 text-white py-3 rounded-lg font-bold shadow hover:bg-amber-600 transition active:scale-[0.98]">
+                    <i class="fas fa-save mr-2"></i>儲存記事
+                </button>
+            </div>
+
+             <div class="history-section">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-bold text-gray-600 border-l-4 border-gray-400 pl-2">歷史紀錄</h3>
+                    <input type="text" onkeyup="renderSymptomHistory(this.value)" placeholder="搜尋..." class="text-sm border rounded px-2 py-1 w-32">
+                </div>
+                <div id="symptom-list" class="space-y-3"></div>
+            </div>
+        </section>
+
+        <!-- 3. Clinic Tab -->
+        <section id="tab-clinic" class="tab-content hidden">
+            <div class="bg-white p-4 rounded-lg shadow mb-6 border-l-4 border-cyan-500 transition-colors duration-300" id="form-card-clinic">
+                <h2 class="text-lg font-bold text-cyan-700 mb-4" id="form-title-clinic">門診紀錄</h2>
+
+                <div class="mb-3">
+                    <label class="block text-sm text-gray-700 font-medium mb-1">看診日期</label>
+                    <input type="date" id="c-date" class="w-full border border-slate-300 rounded p-2 outline-none focus:ring-2 focus:ring-cyan-500">
+                </div>
+
+                <div class="mb-3">
+                    <label class="block text-sm text-gray-700 font-medium mb-1">科別</label>
+                    <div class="flex gap-2">
+                        <select id="c-dept" class="flex-1 border border-slate-300 rounded p-2 outline-none focus:ring-2 focus:ring-cyan-500" onchange="checkOrthopedics(this.value)">
+                        </select>
+                        <button onclick="openAddDeptModal()" class="bg-slate-200 px-3 rounded text-sm text-slate-600 hover:bg-slate-300">新增</button>
+                        <button onclick="deleteCustomDept()" class="bg-red-100 px-3 rounded text-sm text-red-600 hover:bg-red-200">刪除</button>
+                    </div>
+                </div>
+
+                <div id="ortho-options" class="mb-3 hidden bg-cyan-50 p-2 rounded border border-cyan-100">
+                    <label class="block text-sm text-cyan-800 font-bold mb-1">選擇醫院</label>
+                    <div class="flex gap-4">
+                        <label class="flex items-center cursor-pointer"><input type="radio" name="ortho-hosp" value="慈濟" class="mr-1 accent-cyan-600" checked> 慈濟</label>
+                        <label class="flex items-center cursor-pointer"><input type="radio" name="ortho-hosp" value="台大" class="mr-1 accent-cyan-600"> 台大</label>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm text-gray-700 font-medium mb-1">診療紀錄 / 醫囑</label>
+                    <textarea id="c-notes" class="w-full border border-slate-300 rounded p-2 outline-none focus:ring-2 focus:ring-cyan-500" rows="3"></textarea>
+                </div>
+
+                <button id="btn-save-clinic" onclick="saveClinic()" class="w-full bg-cyan-600 text-white py-3 rounded-lg font-bold shadow hover:bg-cyan-700 transition active:scale-[0.98]">
+                    <i class="fas fa-save mr-2"></i>儲存門診紀錄
+                </button>
+            </div>
+
+            <div class="history-section">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-bold text-gray-600 border-l-4 border-gray-400 pl-2">歷史紀錄</h3>
+                    <input type="text" onkeyup="renderClinicHistory(this.value)" placeholder="搜尋..." class="text-sm border rounded px-2 py-1 w-32">
+                </div>
+                <div id="clinic-list" class="space-y-3"></div>
+            </div>
+        </section>
+
+        <!-- 4. Maintenance Tab -->
+        <section id="tab-maintenance" class="tab-content hidden">
+            <div class="bg-white rounded-lg shadow mb-6 overflow-hidden">
+                <div class="flex border-b border-gray-200">
+                    <button onclick="switchSubTab('bone')" id="btn-sub-bone" class="flex-1 py-3 text-center font-bold text-emerald-600 border-b-4 border-emerald-500 bg-emerald-50 transition-colors">
+                        <i class="fas fa-bone mr-1"></i> 保骨針
+                    </button>
+                    <button onclick="switchSubTab('fluoride')" id="btn-sub-fluoride" class="flex-1 py-3 text-center font-bold text-gray-500 hover:bg-gray-50 border-b-4 border-transparent transition-colors">
+                        <i class="fas fa-tooth mr-1"></i> 牙齒塗氟
+                    </button>
+                </div>
+
+                <!-- Bone -->
+                <div id="sub-content-bone" class="p-4 block">
+                     <div class="flex justify-between items-start mb-4">
+                        <h2 class="text-lg font-bold text-emerald-700">保骨針紀錄</h2>
+                        <div id="bone-alert" class="text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded"></div>
+                    </div>
+                    
+                    <div class="flex gap-2 mb-4 items-end bg-slate-50 p-3 rounded border border-slate-100">
+                        <div class="flex-1">
+                            <label class="block text-sm text-gray-700 font-medium mb-1">施打日期</label>
+                            <input type="date" id="m-bone-date" class="w-full border border-slate-300 rounded p-2 outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
+                        </div>
+                        <button onclick="saveBone()" class="bg-emerald-600 text-white px-4 py-2 rounded h-[42px] mb-[1px] shadow hover:bg-emerald-700 font-bold whitespace-nowrap">新增</button>
+                    </div>
+                    
+                    <h3 class="font-bold text-gray-600 border-l-4 border-gray-400 pl-2 mb-2">歷史紀錄</h3>
+                    <div id="bone-list" class="space-y-2 text-sm max-h-60 overflow-y-auto"></div>
+                </div>
+
+                <!-- Fluoride -->
+                <div id="sub-content-fluoride" class="p-4 hidden">
+                    <div class="flex justify-between items-start mb-4">
+                        <h2 class="text-lg font-bold text-violet-700">牙齒塗氟 (每3個月)</h2>
+                        <div id="fluoride-next" class="text-xs bg-violet-100 text-violet-800 px-2 py-1 rounded"></div>
+                    </div>
+
+                    <div class="flex gap-2 mb-4 items-end bg-slate-50 p-3 rounded border border-slate-100">
+                        <div class="flex-1">
+                            <label class="block text-sm text-gray-700 font-medium mb-1">塗氟日期</label>
+                            <input type="date" id="m-flu-date" class="w-full border border-slate-300 rounded p-2 outline-none focus:ring-2 focus:ring-violet-500 bg-white">
+                        </div>
+                        <button onclick="saveFluoride()" class="bg-violet-600 text-white px-4 py-2 rounded h-[42px] mb-[1px] shadow hover:bg-violet-700 font-bold whitespace-nowrap">新增</button>
+                    </div>
+
+                    <h3 class="font-bold text-gray-600 border-l-4 border-gray-400 pl-2 mb-2">歷史紀錄</h3>
+                    <div id="fluoride-list" class="space-y-2 text-sm max-h-60 overflow-y-auto"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 5. Radiotherapy Tab -->
+        <section id="tab-radiotherapy" class="tab-content hidden">
+            <div class="bg-white p-4 rounded-lg shadow mb-6 border-l-4 border-orange-500 transition-colors duration-300" id="form-card-radiotherapy">
+                <h2 class="text-lg font-bold text-orange-700 mb-4" id="form-title-radiotherapy">放療療程計算</h2>
+
+                <div class="grid grid-cols-2 gap-4 mb-3">
+                    <div>
+                        <label class="block text-sm text-gray-700 font-medium mb-1">開始日期</label>
+                        <input type="date" id="r-start-date" class="w-full border border-slate-300 rounded p-2 outline-none focus:ring-2 focus:ring-orange-500" onchange="calcRadioEnd()">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-700 font-medium mb-1">總次數(天)</label>
+                        <input type="number" id="r-days" class="w-full border border-slate-300 rounded p-2 outline-none focus:ring-2 focus:ring-orange-500" placeholder="如: 20" onchange="calcRadioEnd()">
+                    </div>
+                </div>
+
+                <!-- New: End Date Layout (Single line with label) -->
+                 <div class="mb-3 p-3 bg-orange-50 rounded border border-orange-200 flex justify-between items-center">
+                    <span class="text-sm font-bold text-orange-800">預計結束日期 (不含六日):</span>
+                    <span id="r-end-date-display" class="text-xl text-orange-600 font-mono font-bold">--/--/--</span>
+                    <input type="hidden" id="r-calc-end">
+                </div>
+
+                <div class="mb-3">
+                    <label class="block text-sm text-gray-700 font-medium mb-1">照射部位</label>
+                    <input type="text" id="r-part" class="w-full border border-slate-300 rounded p-2 outline-none focus:ring-2 focus:ring-orange-500" placeholder="如: 胸椎、左胸...">
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm text-gray-700 font-medium mb-1">特殊事項</label>
+                    <textarea id="r-notes" class="w-full border border-slate-300 rounded p-2 outline-none focus:ring-2 focus:ring-orange-500" rows="2"></textarea>
+                </div>
+
+                <button id="btn-save-radiotherapy" onclick="saveRadio()" class="w-full bg-orange-500 text-white py-3 rounded-lg font-bold shadow hover:bg-orange-600 transition active:scale-[0.98]">
+                    <i class="fas fa-save mr-2"></i>儲存療程
+                </button>
+            </div>
+
+            <div class="history-section">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-bold text-gray-600 border-l-4 border-gray-400 pl-2">歷史紀錄</h3>
+                    <input type="text" onkeyup="renderRadioHistory(this.value)" placeholder="搜尋..." class="text-sm border rounded px-2 py-1 w-32">
+                </div>
+                <div id="radio-list" class="space-y-3"></div>
+            </div>
+        </section>
+
+        <!-- 6. Reports Tab -->
+        <section id="tab-reports" class="tab-content hidden">
+            <div class="bg-white p-4 rounded-lg shadow mb-6 border-l-4 border-slate-500 transition-colors duration-300" id="form-card-reports">
+                <h2 class="text-lg font-bold text-slate-700 mb-4" id="form-title-reports">檢查報告紀錄</h2>
+
+                <div class="grid grid-cols-2 gap-4 mb-3">
+                    <div>
+                        <label class="block text-sm text-gray-700 font-medium mb-1">檢查日期</label>
+                        <input type="date" id="rep-date" class="w-full border border-slate-300 rounded p-2 outline-none focus:ring-2 focus:ring-slate-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-700 font-medium mb-1">檢查項目</label>
+                        <input type="text" id="rep-item" class="w-full border border-slate-300 rounded p-2 outline-none focus:ring-2 focus:ring-slate-500" placeholder="如: CT, MRI...">
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="block text-sm text-gray-700 font-medium">原文報告內容</label>
+                        <button onclick="translateInput()" class="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-200 transition flex items-center font-bold">
+                            <i class="fas fa-language mr-1"></i> Google 翻譯
+                        </button>
+                    </div>
+                    <textarea id="rep-content" class="w-full border border-slate-300 rounded p-2 font-mono text-sm outline-none focus:ring-2 focus:ring-slate-500" rows="4" placeholder="貼上醫院報告..."></textarea>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm text-gray-700 flex justify-between font-medium mb-1">
+                        <span>中文翻譯 / 重點整理</span>
+                        <span class="text-xs text-gray-500 font-normal">*請自行輸入或貼上翻譯</span>
+                    </label>
+                    <textarea id="rep-trans" class="w-full border border-slate-300 rounded p-2 text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-slate-500" rows="4" placeholder="輸入翻譯後的內容..."></textarea>
+                </div>
+
+                <button id="btn-save-reports" onclick="saveReport()" class="w-full bg-slate-600 text-white py-3 rounded-lg font-bold shadow hover:bg-slate-700 transition active:scale-[0.98]">
+                    <i class="fas fa-save mr-2"></i>儲存報告
+                </button>
+            </div>
+
+            <div class="history-section">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-bold text-gray-600 border-l-4 border-gray-400 pl-2">報告紀錄</h3>
+                    <input type="text" onkeyup="renderReportHistory(this.value)" placeholder="搜尋..." class="text-sm border rounded px-2 py-1 w-32">
+                </div>
+                <div id="report-list" class="space-y-3"></div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // --- Globals ---
+        let editingId = null; // Stores the ID of the record currently being edited
+        let deleteTarget = null; // Stores { type, id } for deletion
+
+        const defaultDepts = ['胸腔內科', '皮膚科', '骨科', '眼科', '腫瘤放射科'];
+        let appData = {
+            treatments: [],
+            symptoms: [],
+            clinics: [],
+            bone: [],
+            fluoride: [],
+            radios: [],
+            reports: [],
+            departments: [...defaultDepts]
+        };
+
+        // --- Utils ---
+        function generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2); }
+        
+        function showToast(message) {
+            const toast = document.getElementById('toast-message');
+            document.getElementById('toast-text').innerText = message;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.remove('opacity-0'), 10);
+            setTimeout(() => {
+                toast.classList.add('opacity-0');
+                setTimeout(() => toast.classList.add('hidden'), 300);
+            }, 2500);
+        }
+
+        // --- Modals ---
+        function closeModal(id) {
+            const modal = document.getElementById(id);
+            modal.classList.add('opacity-0');
+            modal.querySelector('div').classList.add('scale-95');
+            setTimeout(() => { modal.classList.add('hidden'); }, 200);
+        }
+        function openModal(id) {
+            const modal = document.getElementById(id);
+            modal.classList.remove('hidden');
+            modal.classList.remove('opacity-0');
+            modal.querySelector('div').classList.remove('scale-95');
+        }
+
+        // Delete Modal
+        window.openDeleteModal = function(type, id) {
+            deleteTarget = { type, id };
+            openModal('delete-modal');
+        };
+        window.confirmDelete = function() {
+            if (!deleteTarget) return;
+            const { type, id } = deleteTarget;
+            // Handle deleting (if editing the same ID, cancel edit)
+            if(editingId === id) cancelEditMode(type);
+
+            if(type === 'treatment') appData.treatments = appData.treatments.filter(x => x.id !== id);
+            else if(type === 'symptom') appData.symptoms = appData.symptoms.filter(x => x.id !== id);
+            else if(type === 'clinic') appData.clinics = appData.clinics.filter(x => x.id !== id);
+            else if(type === 'bone') appData.bone = appData.bone.filter(x => x.id !== id);
+            else if(type === 'fluoride') appData.fluoride = appData.fluoride.filter(x => x.id !== id);
+            else if(type === 'radio') appData.radios = appData.radios.filter(x => x.id !== id);
+            else if(type === 'report') appData.reports = appData.reports.filter(x => x.id !== id);
+            
+            saveData();
+            closeModal('delete-modal');
+            showToast("紀錄已刪除");
+        };
+
+        // Dept Modal
+        function openAddDeptModal() {
+            document.getElementById('new-dept-name').value = '';
+            openModal('dept-modal');
+        }
+        function confirmAddDept() {
+            const name = document.getElementById('new-dept-name').value.trim();
+            if(name) {
+                if(!appData.departments.includes(name)) {
+                    appData.departments.push(name);
+                    saveData();
+                    renderDeptsSelect();
+                    document.getElementById('c-dept').value = name;
+                    checkOrthopedics(name);
+                    showToast(`已新增科別: ${name}`);
+                } else {
+                    showToast("科別已存在");
+                }
+            }
+            closeModal('dept-modal');
+        }
+
+        // --- Load/Save ---
+        function loadData() {
+            const stored = localStorage.getItem('momCareData');
+            if (stored) {
+                try {
+                    const parsed = JSON.parse(stored);
+                    appData = { ...appData, ...parsed };
+                    // Ensure IDs
+                    ['treatments','symptoms','clinics','bone','fluoride','radios','reports'].forEach(k => {
+                        if(Array.isArray(appData[k])) {
+                            appData[k] = appData[k].map(i => { if(!i.id) i.id = generateId(); return i; });
+                        }
+                    });
+                } catch(e) { console.error(e); }
+                if(!appData.departments || appData.departments.length === 0) appData.departments = [...defaultDepts];
+            }
+            initDateInputs();
+            renderAll();
+        }
+
+        function saveData() {
+            localStorage.setItem('momCareData', JSON.stringify(appData));
+            renderAll();
+        }
+
+        function initDateInputs() {
+            const today = new Date().toISOString().split('T')[0];
+            document.querySelectorAll('input[type="date"]').forEach(el => {
+                if (!el.value) el.value = today;
+            });
+            autoSetNextDate();
+        }
+
+        // --- Editing Logic ---
+        function setEditMode(type, id) {
+            editingId = id;
+            const card = document.getElementById(`form-card-${type}`);
+            const title = document.getElementById(`form-title-${type}`);
+            const btn = document.getElementById(`btn-save-${type}`);
+
+            // Visual cues
+            if(card) { card.classList.remove('border-teal-500', 'border-amber-500', 'border-cyan-500', 'border-orange-500', 'border-slate-500'); card.classList.add('border-purple-500', 'bg-purple-50'); }
+            if(title) { title.innerText = "編輯紀錄中..."; title.classList.add('text-purple-700'); }
+            if(btn) { 
+                btn.innerHTML = '<i class="fas fa-sync-alt mr-2"></i>更新紀錄'; 
+                btn.classList.add('bg-purple-600', 'hover:bg-purple-700'); 
+            }
+            // Scroll to top
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        function cancelEditMode(type) {
+            editingId = null;
+            const card = document.getElementById(`form-card-${type}`);
+            const title = document.getElementById(`form-title-${type}`);
+            const btn = document.getElementById(`btn-save-${type}`);
+            
+            // Revert Visuals (Roughly, hard to match original color exactly without map, defaulting to clear custom classes)
+            if(card) { 
+                card.classList.remove('border-purple-500', 'bg-purple-50'); 
+                // Restore original border color based on type
+                if(type==='treatment') card.classList.add('border-teal-500');
+                if(type==='symptoms') card.classList.add('border-amber-500');
+                if(type==='clinic') card.classList.add('border-cyan-500');
+                if(type==='radiotherapy') card.classList.add('border-orange-500');
+                if(type==='reports') card.classList.add('border-slate-500');
+            }
+            if(title) { 
+                title.innerText = type === 'treatment' ? "新增治療紀錄" : type === 'symptoms' ? "不適紀錄" : type === 'clinic' ? "門診紀錄" : type === 'radiotherapy' ? "放療療程計算" : "檢查報告紀錄";
+                title.classList.remove('text-purple-700');
+            }
+            if(btn) { 
+                btn.innerHTML = '<i class="fas fa-save mr-2"></i>儲存紀錄'; 
+                btn.classList.remove('bg-purple-600', 'hover:bg-purple-700');
+            }
+        }
+
+        window.loadForEdit = function(type, id) {
+            let item;
+            if(type === 'treatment') {
+                item = appData.treatments.find(x => x.id === id);
+                if(item) {
+                    toggleTreatmentType(item.type); // switch view
+                    document.getElementById('t-admit-date').value = item.admit || '';
+                    document.getElementById('t-discharge-date').value = item.discharge || '';
+                    document.getElementById('t-treatment-date').value = item.treatDate || '';
+                    document.getElementById('t-meds').value = item.meds || '';
+                    document.getElementById('t-notes').value = item.notes || '';
+                    document.getElementById('t-next-date').value = item.next || '';
+                    document.getElementById('t-cert').checked = item.cert;
+                    calcHospitalDays();
+                }
+            } else if(type === 'symptoms') {
+                item = appData.symptoms.find(x => x.id === id);
+                if(item) {
+                    document.getElementById('s-date').value = item.date;
+                    // Fix: Set Radio
+                    const radios = document.getElementsByName('s-severity');
+                    for(let r of radios) { if(r.value === item.severity) r.checked = true; }
+                    document.getElementById('s-desc').value = item.desc;
+                }
+            } else if(type === 'clinic') {
+                item = appData.clinics.find(x => x.id === id);
+                if(item) {
+                    document.getElementById('c-date').value = item.date;
+                    renderDeptsSelect(); // ensure options
+                    document.getElementById('c-dept').value = item.dept;
+                    checkOrthopedics(item.dept);
+                    if(item.hospital) {
+                         const radios = document.getElementsByName('ortho-hosp');
+                         for(let r of radios) { if(r.value === item.hospital) r.checked = true; }
+                    }
+                    document.getElementById('c-notes').value = item.notes;
+                }
+            } else if(type === 'radiotherapy') {
+                item = appData.radios.find(x => x.id === id);
+                if(item) {
+                    document.getElementById('r-start-date').value = item.start;
+                    document.getElementById('r-days').value = item.days;
+                    document.getElementById('r-part').value = item.part;
+                    document.getElementById('r-notes').value = item.notes;
+                    calcRadioEnd(); // recalc end date display
+                }
+            } else if(type === 'reports') {
+                item = appData.reports.find(x => x.id === id);
+                if(item) {
+                    document.getElementById('rep-date').value = item.date;
+                    document.getElementById('rep-item').value = item.item;
+                    document.getElementById('rep-content').value = item.content;
+                    document.getElementById('rep-trans').value = item.trans;
+                }
+            }
+            if(item) setEditMode(type, id);
+        };
+
+        // --- Navigation ---
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => {
+                el.classList.add('hidden');
+                el.classList.remove('block');
+            });
+            const target = document.getElementById(`tab-${tabName}`);
+            if(target) {
+                target.classList.remove('hidden');
+                target.classList.add('block');
+            }
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            const tabMap = { 'treatment':0, 'symptoms':1, 'clinic':2, 'maintenance':3, 'radiotherapy':4, 'reports':5 };
+            const buttons = document.querySelectorAll('.tab-btn');
+            if(buttons[tabMap[tabName]]) buttons[tabMap[tabName]].classList.add('active');
+
+            if(tabName === 'clinic') renderDeptsSelect();
+            if(tabName === 'maintenance') { 
+                renderBoneHistory(); renderFluorideHistory(); 
+                if(document.getElementById('sub-content-bone').classList.contains('hidden') && 
+                   document.getElementById('sub-content-fluoride').classList.contains('hidden')) {
+                    switchSubTab('bone');
+                }
+            }
+            window.scrollTo(0,0);
+        }
+
+        function switchSubTab(sub) {
+            const boneContent = document.getElementById('sub-content-bone');
+            const fluContent = document.getElementById('sub-content-fluoride');
+            const btnBone = document.getElementById('btn-sub-bone');
+            const btnFlu = document.getElementById('btn-sub-fluoride');
+            boneContent.classList.add('hidden');
+            fluContent.classList.add('hidden');
+            btnBone.classList.remove('border-emerald-500', 'bg-emerald-50', 'text-emerald-600');
+            btnFlu.classList.remove('border-violet-500', 'bg-violet-50', 'text-violet-600');
+            btnBone.classList.add('border-transparent', 'text-gray-500');
+            btnFlu.classList.add('border-transparent', 'text-gray-500');
+
+            if(sub === 'bone') {
+                boneContent.classList.remove('hidden');
+                btnBone.classList.add('border-emerald-500', 'bg-emerald-50', 'text-emerald-600');
+                btnBone.classList.remove('border-transparent', 'text-gray-500');
+            } else {
+                fluContent.classList.remove('hidden');
+                btnFlu.classList.add('border-violet-500', 'bg-violet-50', 'text-violet-600');
+                btnFlu.classList.remove('border-transparent', 'text-gray-500');
+            }
+        }
+
+        // --- 1. Treatment ---
+        function toggleTreatmentType(type) {
+            const btnIn = document.getElementById('btn-inpatient');
+            const btnOut = document.getElementById('btn-outpatient');
+            const hiddenInput = document.getElementById('treatment-type');
+            const admitGroup = document.getElementById('date-admit-group');
+            const dischargeGroup = document.getElementById('date-discharge-group');
+            const daysDisplay = document.getElementById('hospital-days-display');
+
+            if (type === 'inpatient') {
+                btnIn.classList.replace('text-gray-500', 'text-teal-600');
+                btnIn.classList.add('bg-white', 'shadow', 'font-bold'); btnIn.classList.remove('hover:bg-gray-200');
+                btnOut.classList.replace('text-teal-600', 'text-gray-500');
+                btnOut.classList.remove('bg-white', 'shadow', 'font-bold'); btnOut.classList.add('hover:bg-gray-200');
+                admitGroup.style.display = 'block'; dischargeGroup.style.display = 'block';
+                daysDisplay.classList.remove('hidden'); hiddenInput.value = 'inpatient';
+            } else {
+                btnOut.classList.replace('text-gray-500', 'text-teal-600');
+                btnOut.classList.add('bg-white', 'shadow', 'font-bold'); btnOut.classList.remove('hover:bg-gray-200');
+                btnIn.classList.replace('text-teal-600', 'text-gray-500');
+                btnIn.classList.remove('bg-white', 'shadow', 'font-bold'); btnIn.classList.add('hover:bg-gray-200');
+                admitGroup.style.display = 'none'; dischargeGroup.style.display = 'none';
+                daysDisplay.classList.add('hidden'); hiddenInput.value = 'outpatient';
+            }
+        }
+        function diffDays(d1, d2) {
+            const date1 = new Date(d1); const date2 = new Date(d2);
+            return Math.ceil(Math.abs(date2 - date1) / (1000 * 60 * 60 * 24)); 
+        }
+        function calcHospitalDays() {
+            const start = document.getElementById('t-admit-date').value;
+            const end = document.getElementById('t-discharge-date').value;
+            if (start && end) {
+                document.getElementById('t-days-count').innerText = diffDays(start, end) + 1;
+            }
+        }
+        function autoSetNextDate() {
+            const start = document.getElementById('t-admit-date').value;
+            if (start) {
+                const date = new Date(start);
+                date.setDate(date.getDate() + 21);
+                document.getElementById('t-next-date').value = date.toISOString().split('T')[0];
+            }
+        }
+        function saveTreatment() {
+            const type = document.getElementById('treatment-type').value;
+            const admit = document.getElementById('t-admit-date').value;
+            const discharge = document.getElementById('t-discharge-date').value;
+            const treatDate = document.getElementById('t-treatment-date').value;
+            const meds = document.getElementById('t-meds').value;
+            const notes = document.getElementById('t-notes').value;
+            const next = document.getElementById('t-next-date').value;
+            const cert = document.getElementById('t-cert').checked;
+            let days = 0;
+            if(type === 'inpatient' && admit && discharge) days = diffDays(admit, discharge) + 1;
+
+            const record = { id: editingId || generateId(), type, admit, discharge, treatDate, days, meds, notes, next, cert };
+            
+            if(editingId) {
+                const index = appData.treatments.findIndex(x => x.id === editingId);
+                if(index !== -1) appData.treatments[index] = record;
+                cancelEditMode('treatment');
+                showToast("紀錄已更新");
+            } else {
+                appData.treatments.push(record);
+                showToast("紀錄已儲存");
+            }
+            saveData();
+            document.getElementById('t-meds').value = ''; document.getElementById('t-notes').value = ''; document.getElementById('t-cert').checked = false;
+        }
+        function renderTreatmentHistory(filterText = '') {
+            const list = document.getElementById('treatment-list');
+            const sorted = appData.treatments.sort((a, b) => new Date(b.treatDate) - new Date(a.treatDate));
+            const filterLower = filterText.toLowerCase();
+
+            list.innerHTML = sorted.map(item => {
+                if (filterText && !JSON.stringify(item).toLowerCase().includes(filterLower)) return '';
+                const isIp = item.type === 'inpatient';
+                const badge = isIp 
+                    ? `<span class="bg-teal-100 text-teal-800 text-xs px-2 py-1 rounded font-bold">住院 (${item.days}天)</span>` 
+                    : `<span class="bg-cyan-100 text-cyan-800 text-xs px-2 py-1 rounded font-bold">門診</span>`;
+                const certIcon = item.cert ? `<span class="text-green-600 ml-2 text-xs border border-green-600 px-1 rounded">已申請診斷書</span>` : '';
+                let dateDisplay = `<div class="font-bold text-lg text-gray-800">${item.treatDate} <span class="text-sm font-normal text-gray-500">治療</span></div>`;
+                if(isIp) dateDisplay += `<div class="text-xs text-gray-500">住院: ${item.admit} ~ ${item.discharge}</div>`;
+                return `
+                    <div class="bg-white p-3 rounded shadow border-l-4 ${isIp ? 'border-teal-400' : 'border-cyan-400'} relative group">
+                        <div class="absolute top-2 right-2 flex space-x-2">
+                             <button onclick="loadForEdit('treatment', '${item.id}')" class="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-full text-blue-400 hover:text-blue-600 hover:bg-blue-50 transition"><i class="fas fa-pen"></i></button>
+                             <button onclick="window.openDeleteModal('treatment', '${item.id}')" class="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 transition"><i class="fas fa-trash"></i></button>
+                        </div>
+                        <div class="flex items-center mb-1">${badge} ${certIcon}</div>
+                        ${dateDisplay}
+                        <div class="mt-2 text-gray-700"><strong>藥品:</strong> ${item.meds || '無'}</div>
+                        <div class="mt-1 text-gray-600 text-sm bg-slate-50 p-1 rounded"><strong>記事:</strong> ${item.notes || '無'}</div>
+                        <div class="mt-2 text-sm text-teal-600 font-bold"><i class="fas fa-calendar-alt"></i> 下次預計: ${item.next || '未設定'}</div>
+                    </div>`;
+            }).join('');
+        }
+
+        // --- 2. Symptoms ---
+        function saveSymptom() {
+            const date = document.getElementById('s-date').value;
+            // Fix: Get Radio Value
+            const selectedRadio = document.querySelector('input[name="s-severity"]:checked');
+            const severity = selectedRadio ? selectedRadio.value : 'normal';
+            
+            const desc = document.getElementById('s-desc').value;
+            if(!desc) { showToast("請輸入描述"); return; }
+            
+            const record = { id: editingId || generateId(), date, severity, desc };
+            if(editingId) {
+                const index = appData.symptoms.findIndex(x => x.id === editingId);
+                if(index !== -1) appData.symptoms[index] = record;
+                cancelEditMode('symptoms');
+                showToast("記事已更新");
+            } else {
+                appData.symptoms.push(record);
+                showToast("記事已儲存");
+            }
+            saveData();
+            document.getElementById('s-desc').value = '';
+        }
+        function renderSymptomHistory(filterText = '') {
+            const list = document.getElementById('symptom-list');
+            const mapColor = { 'normal': 'border-gray-400', 'mild': 'border-green-400', 'moderate': 'border-yellow-400', 'severe': 'border-red-500 bg-red-50' };
+            const mapText = { 'normal': '一般', 'mild': '輕微', 'moderate': '中度', 'severe': '嚴重' };
+            const sorted = appData.symptoms.sort((a, b) => new Date(b.date) - new Date(a.date));
+            const filterLower = filterText.toLowerCase();
+
+            list.innerHTML = sorted.map(item => {
+                if(filterText && !JSON.stringify(item).toLowerCase().includes(filterLower)) return '';
+                return `
+                    <div class="bg-white p-3 rounded shadow border-l-4 ${mapColor[item.severity] || 'border-gray-300'} relative">
+                        <div class="absolute top-2 right-2 flex space-x-2">
+                             <button onclick="loadForEdit('symptoms', '${item.id}')" class="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-full text-blue-400 hover:text-blue-600 hover:bg-blue-50 transition"><i class="fas fa-pen"></i></button>
+                             <button onclick="window.openDeleteModal('symptom', '${item.id}')" class="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 transition"><i class="fas fa-trash"></i></button>
+                        </div>
+                        <div class="flex justify-between items-end mb-1 pr-16">
+                            <span class="font-bold text-gray-800">${item.date}</span>
+                            <span class="text-xs font-bold text-gray-500 bg-gray-100 px-1 rounded">[${mapText[item.severity]}]</span>
+                        </div>
+                        <div class="text-gray-700 whitespace-pre-wrap">${item.desc}</div>
+                    </div>`;
+            }).join('');
+        }
+
+        // --- 3. Clinic ---
+        function renderDeptsSelect() {
+            const sel = document.getElementById('c-dept');
+            const currentVal = sel.value;
+            sel.innerHTML = '';
+            appData.departments.forEach(d => { sel.innerHTML += `<option value="${d}">${d}</option>`; });
+            if(currentVal && appData.departments.includes(currentVal)) sel.value = currentVal;
+            checkOrthopedics(sel.value);
+        }
+        function checkOrthopedics(val) {
+            const orthoDiv = document.getElementById('ortho-options');
+            if(val === '骨科') orthoDiv.classList.remove('hidden'); else orthoDiv.classList.add('hidden');
+        }
+        function deleteCustomDept() {
+            const val = document.getElementById('c-dept').value;
+            if(defaultDepts.includes(val)) { showToast("預設科別無法刪除"); return; }
+            if(confirm(`確定刪除 ${val} 嗎？`)) {
+                appData.departments = appData.departments.filter(d => d !== val);
+                saveData(); renderDeptsSelect();
+            }
+        }
+        function saveClinic() {
+            const date = document.getElementById('c-date').value;
+            const dept = document.getElementById('c-dept').value;
+            const notes = document.getElementById('c-notes').value;
+            let hospital = '';
+            if(dept === '骨科') {
+                const radios = document.getElementsByName('ortho-hosp');
+                for(let r of radios) { if(r.checked) hospital = r.value; }
+            }
+            const record = { id: editingId || generateId(), date, dept, hospital, notes };
+            
+            if(editingId) {
+                const index = appData.clinics.findIndex(x => x.id === editingId);
+                if(index !== -1) appData.clinics[index] = record;
+                cancelEditMode('clinic');
+                showToast("紀錄已更新");
+            } else {
+                appData.clinics.push(record);
+                showToast("紀錄已儲存");
+            }
+            saveData();
+            document.getElementById('c-notes').value = '';
+        }
+        function renderClinicHistory(filterText = '') {
+            const list = document.getElementById('clinic-list');
+            const sorted = appData.clinics.sort((a, b) => new Date(b.date) - new Date(a.date));
+            const filterLower = filterText.toLowerCase();
+            list.innerHTML = sorted.map(item => {
+                if(filterText && !JSON.stringify(item).toLowerCase().includes(filterLower)) return '';
+                const hospTag = item.hospital ? `<span class="bg-cyan-100 text-cyan-800 text-xs px-2 rounded ml-2">${item.hospital}</span>` : '';
+                return `
+                    <div class="bg-white p-3 rounded shadow border-l-4 border-cyan-400 relative">
+                        <div class="absolute top-2 right-2 flex space-x-2">
+                             <button onclick="loadForEdit('clinic', '${item.id}')" class="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-full text-blue-400 hover:text-blue-600 hover:bg-blue-50 transition"><i class="fas fa-pen"></i></button>
+                             <button onclick="window.openDeleteModal('clinic', '${item.id}')" class="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 transition"><i class="fas fa-trash"></i></button>
+                        </div>
+                        <div class="font-bold text-gray-800 mb-1">${item.date} <span class="text-cyan-600 ml-2">${item.dept}</span>${hospTag}</div>
+                        <div class="text-gray-600 text-sm whitespace-pre-wrap mt-1 bg-slate-50 p-2 rounded">${item.notes || '無紀錄'}</div>
+                    </div>`;
+            }).join('');
+        }
+
+        // --- 4. Maintenance (No Edit needed for simple date logs, just delete and re-add) ---
+        function saveBone() {
+            const date = document.getElementById('m-bone-date').value;
+            appData.bone.push({ id: generateId(), date });
+            saveData(); showToast("紀錄已新增");
+        }
+        function saveFluoride() {
+            const date = document.getElementById('m-flu-date').value;
+            appData.fluoride.push({ id: generateId(), date });
+            saveData(); showToast("紀錄已新增");
+        }
+        function renderBoneHistory() {
+            const list = document.getElementById('bone-list');
+            const sorted = appData.bone.sort((a, b) => new Date(b.date) - new Date(a.date));
+            if(sorted.length > 0) {
+                const diff = Math.floor((new Date() - new Date(sorted[0].date)) / 86400000);
+                document.getElementById('bone-alert').innerText = `距離上次施打已過 ${diff} 天`;
+            } else document.getElementById('bone-alert').innerText = '尚無紀錄';
+            list.innerHTML = sorted.map((item, i) => {
+                let intervalMsg = i < sorted.length - 1 ? `<span class="text-xs text-gray-400 ml-2">(距上次 ${diffDays(sorted[i+1].date, item.date)} 天)</span>` : '';
+                return `<div class="flex justify-between items-center bg-white p-2 rounded border border-gray-100 shadow-sm"><span class="text-gray-700 font-mono">${item.date} ${intervalMsg}</span><button onclick="window.openDeleteModal('bone', '${item.id}')" class="text-gray-400 hover:text-red-600 px-2"><i class="fas fa-trash"></i></button></div>`;
+            }).join('');
+        }
+        function renderFluorideHistory() {
+            const list = document.getElementById('fluoride-list');
+            const sorted = appData.fluoride.sort((a, b) => new Date(b.date) - new Date(a.date));
+            if(sorted.length > 0) {
+                const next = new Date(sorted[0].date); next.setMonth(next.getMonth() + 3);
+                document.getElementById('fluoride-next').innerText = `下次建議: ${next.toISOString().split('T')[0]}`;
+            } else document.getElementById('fluoride-next').innerText = '尚無紀錄';
+            list.innerHTML = sorted.map(item => `<div class="flex justify-between items-center bg-white p-2 rounded border border-gray-100 shadow-sm"><span class="text-gray-700 font-mono">${item.date}</span><button onclick="window.openDeleteModal('fluoride', '${item.id}')" class="text-gray-400 hover:text-red-600 px-2"><i class="fas fa-trash"></i></button></div>`).join('');
+        }
+
+        // --- 5. Radiotherapy ---
+        function calcRadioEnd() {
+            const startStr = document.getElementById('r-start-date').value;
+            const days = parseInt(document.getElementById('r-days').value) || 0;
+            if(startStr && days > 0) {
+                let current = new Date(startStr);
+                let count = 0;
+                // Subtract 1 because start day counts as day 1
+                while(count < days) {
+                    const dayOfWeek = current.getDay();
+                    if(dayOfWeek !== 0 && dayOfWeek !== 6) count++;
+                    if(count === days) break;
+                    current.setDate(current.getDate() + 1);
+                }
+                // Correction: The loop adds one day too many at the end step, or we need to be careful.
+                // Re-logic: Start date is day 1. 
+                // Reset
+                current = new Date(startStr);
+                let added = 1; // Start date is day 1 (if weekday)
+                if (current.getDay() === 0 || current.getDay() === 6) added = 0;
+                
+                while (added < days) {
+                    current.setDate(current.getDate() + 1);
+                    if (current.getDay() !== 0 && current.getDay() !== 6) {
+                        added++;
+                    }
+                }
+                const res = current.toISOString().split('T')[0];
+                document.getElementById('r-end-date-display').innerText = res;
+                document.getElementById('r-calc-end').value = res;
+            } else {
+                document.getElementById('r-end-date-display').innerText = "--/--/--";
+                document.getElementById('r-calc-end').value = "";
+            }
+        }
+        function saveRadio() {
+            const start = document.getElementById('r-start-date').value;
+            const days = document.getElementById('r-days').value;
+            const part = document.getElementById('r-part').value;
+            const end = document.getElementById('r-calc-end').value;
+            const notes = document.getElementById('r-notes').value;
+            if(!start || !days) { showToast("請輸入日期與天數"); return; }
+            
+            const record = { id: editingId || generateId(), start, days, part, end, notes };
+            if(editingId) {
+                const index = appData.radios.findIndex(x => x.id === editingId);
+                if(index !== -1) appData.radios[index] = record;
+                cancelEditMode('radiotherapy');
+                showToast("療程已更新");
+            } else {
+                appData.radios.push(record);
+                showToast("療程已儲存");
+            }
+            saveData();
+            document.getElementById('r-notes').value = '';
+        }
+        function renderRadioHistory(filterText = '') {
+            const list = document.getElementById('radio-list');
+            const sorted = appData.radios.sort((a, b) => new Date(b.start) - new Date(a.start));
+            const filterLower = filterText.toLowerCase();
+
+            list.innerHTML = sorted.map(item => {
+                if(filterText && !JSON.stringify(item).toLowerCase().includes(filterLower)) return '';
+                return `
+                    <div class="bg-white p-3 rounded shadow border-l-4 border-orange-400 relative">
+                        <div class="absolute top-2 right-2 flex space-x-2">
+                             <button onclick="loadForEdit('radiotherapy', '${item.id}')" class="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-full text-blue-400 hover:text-blue-600 hover:bg-blue-50 transition"><i class="fas fa-pen"></i></button>
+                             <button onclick="window.openDeleteModal('radio', '${item.id}')" class="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 transition"><i class="fas fa-trash"></i></button>
+                        </div>
+                        <div class="font-bold text-gray-800 mb-1 flex items-center">
+                            <span>${item.start}</span>
+                            <span class="mx-2 text-gray-400">~</span>
+                            <span class="text-orange-600">${item.end}</span>
+                            <span class="ml-2 text-xs font-normal text-gray-500 bg-gray-100 px-1 rounded">(${item.days}次)</span>
+                        </div>
+                        <div class="text-sm text-gray-700">部位: ${item.part}</div>
+                        <div class="text-sm text-gray-500 mt-1 bg-orange-50 p-1 rounded">${item.notes || ''}</div>
+                    </div>`;
+            }).join('');
+        }
+
+        // --- 6. Reports ---
+        function openTranslate(id) {
+            const item = appData.reports.find(x => x.id === id);
+            if(!item || !item.content) return;
+            const text = item.content;
+            const url = `https://translate.google.com/?sl=auto&tl=zh-TW&text=${encodeURIComponent(text)}&op=translate`;
+            window.open(url, '_blank');
+        }
+
+        function translateInput() {
+            const text = document.getElementById('rep-content').value;
+            if(!text) { showToast("請先輸入原文"); return; }
+            const url = `https://translate.google.com/?sl=auto&tl=zh-TW&text=${encodeURIComponent(text)}&op=translate`;
+            window.open(url, '_blank');
+        }
+
+        function saveReport() {
+            const date = document.getElementById('rep-date').value;
+            const item = document.getElementById('rep-item').value;
+            const content = document.getElementById('rep-content').value;
+            const trans = document.getElementById('rep-trans').value;
+            if(!item) { showToast("請輸入檢查項目"); return; }
+            
+            const record = { id: editingId || generateId(), date, item, content, trans };
+            if(editingId) {
+                const index = appData.reports.findIndex(x => x.id === editingId);
+                if(index !== -1) appData.reports[index] = record;
+                cancelEditMode('reports');
+                showToast("報告已更新");
+            } else {
+                appData.reports.push(record);
+                showToast("報告已儲存");
+            }
+            saveData();
+            document.getElementById('rep-content').value = ''; document.getElementById('rep-trans').value = ''; document.getElementById('rep-item').value = '';
+        }
+        function renderReportHistory(filterText = '') {
+            const list = document.getElementById('report-list');
+            const sorted = appData.reports.sort((a, b) => new Date(b.date) - new Date(a.date));
+            const filterLower = filterText.toLowerCase();
+
+            list.innerHTML = sorted.map(el => {
+                if(filterText && !JSON.stringify(el).toLowerCase().includes(filterLower)) return '';
+                const safeContent = el.content.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const safeTrans = el.trans.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                
+                return `
+                    <div class="bg-white p-3 rounded shadow border-l-4 border-slate-400 relative">
+                        <div class="absolute top-2 right-2 flex space-x-2">
+                             <button onclick="loadForEdit('reports', '${el.id}')" class="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-full text-blue-400 hover:text-blue-600 hover:bg-blue-50 transition"><i class="fas fa-pen"></i></button>
+                             <button onclick="window.openDeleteModal('report', '${el.id}')" class="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 transition"><i class="fas fa-trash"></i></button>
+                        </div>
+                        <div class="font-bold text-gray-800 mb-2 pr-16">${el.date} - ${el.item}</div>
+                        
+                        <div class="bg-gray-50 p-2 rounded text-xs text-gray-600 font-mono mb-2 relative border border-gray-200">
+                             <div class="absolute top-1 right-1 flex space-x-1">
+                                <button onclick="openTranslate('${el.id}')" class="text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded border border-blue-200 flex items-center gap-1 transition shadow-sm" title="Google翻譯">
+                                    <i class="fas fa-language"></i> <span class="font-bold">翻譯</span>
+                                </button>
+                            </div>
+                            <div class="whitespace-pre-wrap pt-8 pb-1 px-1">${safeContent || '(無原文)'}</div>
+                        </div>
+
+                        ${el.trans ? `
+                        <div class="bg-slate-100 p-2 rounded text-sm text-slate-900 mb-1 border border-slate-200">
+                            <strong class="block text-slate-700 text-xs mb-1">中文重點/翻譯:</strong>
+                            <div class="whitespace-pre-wrap">${safeTrans}</div>
+                        </div>` : ''}
+                    </div>`;
+            }).join('');
+        }
+
+        function renderAll() {
+            renderTreatmentHistory(); renderSymptomHistory(); renderDeptsSelect(); renderClinicHistory();
+            renderBoneHistory(); renderFluorideHistory(); renderRadioHistory(); renderReportHistory();
+        }
+
+        window.onload = loadData;
+
+    </script>
+</body>
+</html>
