@@ -26,18 +26,13 @@
         .tab-btn:hover:not(.active) {
             background-color: #e2e8f0;
         }
-        /* Mobile text adjustment */
         @media (max-width: 640px) {
             .tab-text { font-size: 10px; }
             .tab-btn i { font-size: 1.1rem; margin-bottom: 2px; }
             .tab-btn { padding: 6px 2px; }
         }
-        
-        /* Modal Animation */
         .modal-enter { opacity: 0; transform: scale(0.95); }
         .modal-enter-active { opacity: 1; transform: scale(1); transition: all 0.2s; }
-        .modal-exit { opacity: 1; transform: scale(1); }
-        .modal-exit-active { opacity: 0; transform: scale(0.95); transition: all 0.2s; }
     </style>
 </head>
 <body class="pb-20">
@@ -58,6 +53,56 @@
             <div class="bg-gray-50 p-4 flex justify-end space-x-3">
                 <button onclick="closeModal('delete-modal')" class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">取消</button>
                 <button onclick="confirmDelete()" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 shadow-sm">確認刪除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 資料管理視窗 (Data Modal) -->
+    <div id="data-modal" class="fixed inset-0 bg-slate-900 bg-opacity-50 hidden flex justify-center items-center z-[100] p-4 transition-opacity duration-200">
+        <div class="bg-white rounded-lg shadow-2xl max-w-sm w-full overflow-hidden">
+            <div class="bg-indigo-50 p-4 border-b border-indigo-100 flex items-center justify-between">
+                <h3 class="text-lg font-bold text-indigo-800"><i class="fas fa-database mr-2"></i>資料管理</h3>
+                <button onclick="closeModal('data-modal')" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <!-- 匯出 Excel -->
+                <button onclick="exportToExcel()" class="w-full flex items-center justify-between p-4 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition group">
+                    <div class="flex items-center">
+                        <div class="bg-emerald-100 p-2 rounded-full mr-3 group-hover:bg-emerald-200"><i class="fas fa-file-excel text-emerald-600"></i></div>
+                        <div class="text-left">
+                            <div class="font-bold text-emerald-800">匯出 Excel</div>
+                            <div class="text-xs text-emerald-600">將資料轉為試算表</div>
+                        </div>
+                    </div>
+                    <i class="fas fa-chevron-right text-emerald-400"></i>
+                </button>
+
+                <hr class="border-gray-100">
+
+                <!-- 備份 -->
+                <button onclick="downloadBackup()" class="w-full flex items-center justify-between p-4 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition group">
+                    <div class="flex items-center">
+                        <div class="bg-blue-100 p-2 rounded-full mr-3 group-hover:bg-blue-200"><i class="fas fa-download text-blue-600"></i></div>
+                        <div class="text-left">
+                            <div class="font-bold text-blue-800">下載備份檔</div>
+                            <div class="text-xs text-blue-600">保存資料以轉移手機</div>
+                        </div>
+                    </div>
+                    <i class="fas fa-chevron-right text-blue-400"></i>
+                </button>
+
+                <!-- 還原 -->
+                <button onclick="triggerRestore()" class="w-full flex items-center justify-between p-4 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition group">
+                    <div class="flex items-center">
+                        <div class="bg-amber-100 p-2 rounded-full mr-3 group-hover:bg-amber-200"><i class="fas fa-upload text-amber-600"></i></div>
+                        <div class="text-left">
+                            <div class="font-bold text-amber-800">匯入還原</div>
+                            <div class="text-xs text-amber-600">讀取備份檔 (會覆蓋現有)</div>
+                        </div>
+                    </div>
+                    <i class="fas fa-chevron-right text-amber-400"></i>
+                </button>
+                <input type="file" id="restore-input" accept=".json" class="hidden" onchange="handleRestoreFile(this)">
             </div>
         </div>
     </div>
@@ -88,12 +133,12 @@
     <div class="sticky top-0 z-50 bg-white shadow-md">
         <div class="bg-teal-600 text-white p-3 flex justify-between items-center">
             <h1 class="text-xl font-bold"><i class="fas fa-heartbeat mr-2"></i>媽媽的健康紀錄</h1>
-            <button onclick="exportToExcel()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded text-sm shadow transition">
-                <i class="fas fa-file-excel mr-1"></i>匯出Excel
+            <button onclick="openModal('data-modal')" class="bg-white/20 hover:bg-white/30 text-white px-3 py-1 rounded text-sm shadow transition border border-white/30">
+                <i class="fas fa-cog mr-1"></i>資料管理
             </button>
         </div>
         
-        <!-- Modified Nav: Full width, Flexbox, No scroll -->
+        <!-- Navigation -->
         <nav class="flex w-full bg-slate-50 border-b border-slate-200">
             <button onclick="switchTab('treatment')" class="tab-btn active flex-1 flex flex-col items-center justify-center border-r border-slate-200 py-2">
                 <i class="fas fa-procedures text-xl"></i>
@@ -206,7 +251,6 @@
 
                 <div class="mb-3">
                     <label class="block text-sm text-gray-700 font-medium mb-2">嚴重程度</label>
-                    <!-- Modified: Flexbox Row Layout for Radio Buttons -->
                     <div class="flex justify-between items-center bg-slate-50 p-2 rounded border border-slate-200" id="s-severity-group">
                         <label class="cursor-pointer flex flex-col items-center">
                             <input type="radio" name="s-severity" value="normal" class="text-amber-500 focus:ring-amber-500 w-4 h-4 mb-1" checked>
@@ -411,7 +455,7 @@
                 <div class="mb-3">
                     <div class="flex justify-between items-center mb-1">
                         <label class="block text-sm text-gray-700 font-medium">原文報告內容</label>
-                        <button onclick="translateInput()" class="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-200 transition flex items-center font-bold">
+                        <button onclick="translateInput()" class="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-200 transition flex items-center font-bold shadow-sm">
                             <i class="fas fa-language mr-1"></i> Google 翻譯
                         </button>
                     </div>
@@ -565,6 +609,60 @@
                 if (!el.value) el.value = today;
             });
             autoSetNextDate();
+        }
+
+        // --- Backup & Restore Logic ---
+        function downloadBackup() {
+            const dataStr = JSON.stringify(appData, null, 2);
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `mom_care_backup_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            closeModal('data-modal');
+            showToast("備份檔下載中");
+        }
+
+        function triggerRestore() {
+            document.getElementById('restore-input').click();
+        }
+
+        function handleRestoreFile(input) {
+            const file = input.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    // Basic validation check
+                    if (!parsed.treatments || !parsed.clinics) {
+                        alert("檔案格式錯誤：這似乎不是本 App 的備份檔");
+                        return;
+                    }
+                    if(confirm("確定要匯入此備份檔嗎？\n這將會覆蓋您目前所有的資料！")) {
+                        appData = parsed;
+                        // Ensure legacy data has IDs
+                        ['treatments','symptoms','clinics','bone','fluoride','radios','reports'].forEach(k => {
+                            if(Array.isArray(appData[k])) {
+                                appData[k] = appData[k].map(i => { if(!i.id) i.id = generateId(); return i; });
+                            }
+                        });
+                        saveData();
+                        closeModal('data-modal');
+                        showToast("資料還原成功！");
+                    }
+                } catch(err) {
+                    alert("匯入失敗：檔案損毀或格式不符");
+                    console.error(err);
+                }
+                // Reset input
+                input.value = '';
+            };
+            reader.readAsText(file);
         }
 
         // --- Editing Logic ---
@@ -1114,6 +1212,43 @@
             }).join('');
         }
 
+        // --- Export to Excel ---
+        function exportToExcel() {
+            if (typeof XLSX === 'undefined') {
+                showToast("錯誤：Excel 元件未載入，請檢查網路");
+                return;
+            }
+            try {
+                const wb = XLSX.utils.book_new();
+
+                const wsTreat = XLSX.utils.json_to_sheet(appData.treatments.map(x => ({ 類別: x.type==='inpatient'?'住院':'門診', 入院:x.admit, 出院:x.discharge, 治療日:x.treatDate, 天數:x.days, 藥品:x.meds, 記事:x.notes, 下次預計:x.next, 診斷書:x.cert?'有':'無' })));
+                XLSX.utils.book_append_sheet(wb, wsTreat, "治療紀錄");
+
+                const wsSymp = XLSX.utils.json_to_sheet(appData.symptoms.map(x => ({ 日期:x.date, 程度:x.severity, 內容:x.desc })));
+                XLSX.utils.book_append_sheet(wb, wsSymp, "不適紀錄");
+
+                const wsClinic = XLSX.utils.json_to_sheet(appData.clinics.map(x => ({ 日期:x.date, 科別:x.dept, 醫院:x.hospital, 紀錄:x.notes })));
+                XLSX.utils.book_append_sheet(wb, wsClinic, "門診紀錄");
+
+                const wsBone = XLSX.utils.json_to_sheet(appData.bone.map(x => ({項目:'保骨針', 日期:x.date})));
+                const wsFlu = XLSX.utils.json_to_sheet(appData.fluoride.map(x => ({項目:'塗氟', 日期:x.date})));
+                XLSX.utils.book_append_sheet(wb, wsBone, "保骨針");
+                XLSX.utils.book_append_sheet(wb, wsFlu, "牙齒塗氟");
+
+                const wsRadio = XLSX.utils.json_to_sheet(appData.radios.map(x => ({ 開始:x.start, 天數:x.days, 部位:x.part, 結束:x.end, 備註:x.notes })));
+                XLSX.utils.book_append_sheet(wb, wsRadio, "放療");
+
+                const wsRep = XLSX.utils.json_to_sheet(appData.reports.map(x => ({ 日期:x.date, 項目:x.item, 原文:x.content, 翻譯:x.trans })));
+                XLSX.utils.book_append_sheet(wb, wsRep, "檢查報告");
+
+                XLSX.writeFile(wb, `媽媽醫療紀錄_${new Date().toISOString().split('T')[0]}.xlsx`);
+                showToast("Excel 下載已啟動");
+            } catch (e) {
+                console.error(e);
+                showToast("匯出失敗：" + e.message);
+            }
+        }
+
         function renderAll() {
             renderTreatmentHistory(); renderSymptomHistory(); renderDeptsSelect(); renderClinicHistory();
             renderBoneHistory(); renderFluorideHistory(); renderRadioHistory(); renderReportHistory();
@@ -1123,5 +1258,4 @@
 
     </script>
 </body>
-
 </html>
